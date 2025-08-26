@@ -1,3 +1,5 @@
+[![MSeeP.ai Security Assessment Badge](https://mseep.net/pr/agent-on-the-fly-memento-badge.png)](https://mseep.ai/app/agent-on-the-fly-memento)
+
 # Memento: Fine-tuning LLM Agents **without** Fine-tuning LLMs
 
 > A memory-based, continual-learning framework that helps LLM agents improve from experience **without** updating model weights.
