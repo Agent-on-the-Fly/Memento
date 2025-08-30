@@ -54,6 +54,8 @@ mcp = FastMCP("video_tools")
 
 
 def _capture_screenshot(video_file: str, timestamp: float, width: int = 320) -> Image.Image:
+    if not os.path.isfile(video_file):
+        raise ValueError(f"Invalid video file path: {video_file}")
     out, _ = (
         ffmpeg.input(video_file, ss=timestamp)
         .filter("scale", width, -1)
@@ -64,6 +66,8 @@ def _capture_screenshot(video_file: str, timestamp: float, width: int = 320) -> 
 
 
 def _extract_audio(video_file: str, output_format: str = "mp3") -> str:
+    if not os.path.isfile(video_file):
+        raise ValueError(f"Invalid video file path: {video_file}")
     basename = os.path.splitext(video_file)[0]
     out_path = f"{basename}.{output_format}"
     (
