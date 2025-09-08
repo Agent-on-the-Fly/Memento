@@ -303,7 +303,7 @@ class CustomInterpreter(BaseInterpreter):
 
 ## 🙏 Acknowledgement
 
-* Some parts of the code in the toolkits and interpreters are adapted from [Camel-AI](https://github.com/camel-ai/camel).
+* Some of the code in the toolkits and interpreters is adapted from [Camel-AI](https://github.com/camel-ai/camel).
 
 ---
 
