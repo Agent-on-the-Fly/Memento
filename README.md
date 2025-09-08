@@ -312,11 +312,12 @@ class CustomInterpreter(BaseInterpreter):
 If Memento helps your work, please cite:
 
 ```bibtex
-@article{zhou2025agentfly,
-  title={AgentFly: Fine-tuning LLM Agents without Fine-tuning LLMs},
-  author={Zhou, Huichi and Chen, Yihang and Guo, Siyuan and Yan, Xue and Lee, Kin Hei and Wang, Zihan and Lee, Ka Yiu and Zhang, Guchun and Shao, Kun and Yang, Linyi and others},
-  journal={arXiv preprint arXiv:2508.16153},
-  year={2025}
+@article{zhou2025mementofinetuningllmagents,
+      title={Memento: Fine-tuning LLM Agents without Fine-tuning LLMs}, 
+      author={Huichi Zhou and Yihang Chen and Siyuan Guo and Xue Yan and Kin Hei Lee and Zihan Wang and Ka Yiu Lee and Guchun Zhang and Kun Shao and Linyi Yang and Jun Wang},
+      journal={arXiv preprint arXiv: 2508.16153},
+      url={https://arxiv.org/abs/2508.16153},
+      year={2025}
 }
 
 @article{huang2025deep,
