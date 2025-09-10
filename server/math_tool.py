@@ -1,3 +1,4 @@
+import builtins
 from mcp.server.fastmcp import FastMCP
 
 # --------------------------------------------------------------------------- #
@@ -37,9 +38,9 @@ async def divide(a: float, b: float, decimal_places: int = 2) -> float:
 
 
 @mcp.tool()
-async def round(a: float, decimal_places: int = 0) -> float:   # noqa: A001
+def round(a: float, decimal_places: int = 0) -> float:   # noqa: A001
     """Round *a* to *decimal_places* (default 0)."""
-    return round(a, decimal_places)
+    return builtins.round(a, decimal_places)
 
 # --------------------------------------------------------------------------- #
 #  Entrypoint
