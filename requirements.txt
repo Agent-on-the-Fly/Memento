@@ -16,3 +16,10 @@ python-pptx==1.0.2
 docx2markdown==0.1.1    
 chunkr_ai
 xmltodict==0.14.2
+crawl4ai
+PyGithub
+matplotlib
+geopy
+requests
+psutil
+fpdf2
