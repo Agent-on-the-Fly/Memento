@@ -273,6 +273,15 @@ def parse_args():
         "server/research_assistant_tool.py",
         "server/code_optimizer_tool.py",
         "server/debate_simulator_tool.py",
+        "server/github_tool.py",
+        "server/plotting_tool.py",
+        "server/weather_tool.py",
+        "server/news_tool.py",
+        "server/calendar_tool.py",
+        "server/system_tool.py",
+        "server/pdf_generator_tool.py",
+        "server/database_tool.py",
+        "server/human_tool.py",
     ], help="Paths of tool server scripts")
     return parser.parse_args()
 
