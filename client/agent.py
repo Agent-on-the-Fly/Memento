@@ -37,7 +37,7 @@ META_SYSTEM_PROMPT = (
     "FINAL ANSWER: <answer>\n\n" \
     " YOUR FINAL ANSWER should be a number OR as few words as possible OR a comma separated list of numbers and/or strings. If you are asked for a number, don't use comma to write your number neither use units such as $ or percent sign unless specified otherwise. If you are asked for a string, don't use articles, neither abbreviations (e.g. for cities), and write the digits in plain text unless specified otherwise. If you are asked for a comma separated list, apply the above rules depending of whether the element to be put in the list is a number or a string.\n"
     "Please ensure that the final answer strictly follows the question requirements, without any additional analysis.\n"
-    "If the final ansert is not complete, emit a *new* JSON plan for the remaining work. Keep cycles as\n"
+    "If the final answer is not complete, emit a *new* JSON plan for the remaining work. Keep cycles as\n"
     "few as possible. Never call tools yourself — that's the EXECUTOR's job."\
     "⚠️  Reply with *pure JSON only*."
 )
