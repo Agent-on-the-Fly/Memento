@@ -2,6 +2,7 @@ from __future__ import annotations
 import asyncio
 import argparse
 import os
+import sys
 import uuid
 from pathlib import Path
 from typing import Dict, Any, List
@@ -167,7 +168,7 @@ class HierarchicalClient:
         self.exit_stack = AsyncExitStack()
         for script in scripts:
             path = Path(script)
-            cmd = "python" if path.suffix == ".py" else "node"
+            cmd = sys.executable if path.suffix == ".py" else "node"
             params = StdioServerParameters(command=cmd, args=[str(path)])
             stdio, write = await self.exit_stack.enter_async_context(stdio_client(params))
             session = await self.exit_stack.enter_async_context(ClientSession(stdio, write))
@@ -266,6 +267,12 @@ def parse_args():
         "server/math_tool.py",
         "server/search_tool.py",
         "server/video_tool.py",
+        "server/cognitive_modeler_tool.py",
+        "server/ethical_advisor_tool.py",
+        "server/creative_writing_tool.py",
+        "server/research_assistant_tool.py",
+        "server/code_optimizer_tool.py",
+        "server/debate_simulator_tool.py",
     ], help="Paths of tool server scripts")
     return parser.parse_args()
 
