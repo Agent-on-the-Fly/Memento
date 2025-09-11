@@ -1,6 +1,13 @@
 import os
 from openai import AsyncOpenAI
 from mcp.server.fastmcp import FastMCP
+import argparse
+from interpreters.logger import get_logger
+
+# --------------------------------------------------------------------------- #
+#  Logger setup
+# --------------------------------------------------------------------------- #
+logger = get_logger(__name__)
 
 # --------------------------------------------------------------------------- #
 #  FastMCP server instance
@@ -82,4 +89,19 @@ async def generate_storyboard(scene_description: str) -> list:
 # --------------------------------------------------------------------------- #
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--log-level",
+        type=str,
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        help="Set the logging level.",
+    )
+    args, _ = parser.parse_known_args()
+
+    log_level = args.log_level.upper()
+    logger.setLevel(log_level)
+    for handler in logger.handlers:
+        handler.setLevel(log_level)
+
     mcp.run(transport="stdio")

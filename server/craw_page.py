@@ -14,6 +14,14 @@ Dependencies
 
 from mcp.server.fastmcp import FastMCP
 from crawl4ai import AsyncWebCrawler
+import argparse
+from interpreters.logger import get_logger
+
+# --------------------------------------------------------------------------- #
+#  Logger setup
+# --------------------------------------------------------------------------- #
+
+logger = get_logger(__name__)
 
 # --------------------------------------------------------------------------- #
 #  FastMCP server instance
@@ -58,11 +66,13 @@ async def crawl_page(url: str) -> str:
             (due to network errors, access restrictions, or page layout
             issues), a plain-text error message is returned instead.
     """
+    logger.info(f"Crawling page: {url}")
     try:
         async with AsyncWebCrawler() as crawler:
             result = await crawler.arun(url=url)
             return result.markdown
     except Exception as exc:
+        logger.error(f"Crawl error on {url}: {exc}")
         return f"⚠️ Crawl error: {exc!s}"
 
 
@@ -71,5 +81,20 @@ async def crawl_page(url: str) -> str:
 # --------------------------------------------------------------------------- #
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--log-level",
+        type=str,
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        help="Set the logging level.",
+    )
+    args, _ = parser.parse_known_args()
+
+    log_level = args.log_level.upper()
+    logger.setLevel(log_level)
+    for handler in logger.handlers:
+        handler.setLevel(log_level)
+
     # Use stdio when embedding inside an agent, or HTTP during development.
     mcp.run(transport="stdio")

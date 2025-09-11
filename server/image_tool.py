@@ -10,6 +10,9 @@ import base64
 import io
 import os
 from typing import Optional
+import argparse
+import logging
+from interpreters.logger import get_logger
 
 import anyio
 import openai
@@ -19,7 +22,6 @@ from urllib.parse import urlparse
 from openai import AsyncOpenAI              # ← new
 
 from mcp.server.fastmcp import FastMCP
-from loguru import logger
 
 
 from dotenv import load_dotenv
@@ -108,7 +110,7 @@ class ImageAnalysisToolkit:
             )
             return response.choices[0].message.content.strip()
         except Exception as e:
-            logger.error(f"OpenAI call failed: {e}")
+            logger.error("OpenAI call failed: %s", e)
             raise
 
     async def _prepare_image(self, path: str) -> str:
@@ -120,16 +122,21 @@ class ImageAnalysisToolkit:
 
         # Remote URL – just return it (OpenAI fetches it directly)
         if parsed.scheme in ("http", "https"):
-            logger.debug(f"Using remote image URL: {path}")
+            logger.debug("Using remote image URL: %s", path)
             return path
 
         # Local file – read & encode
-        logger.debug(f"Encoding local image: {path}")
+        logger.debug("Encoding local image: %s", path)
         data = await anyio.to_thread.run_sync(lambda: open(path, "rb").read())
         mime = Image.open(io.BytesIO(data)).get_format_mimetype()
         b64 = base64.b64encode(data).decode()
         return f"data:{mime};base64,{b64}"
 
+
+# --------------------------------------------------------------------------- #
+#  Logger setup
+# --------------------------------------------------------------------------- #
+logger = get_logger(__name__)
 
 # --------------------------------------------------------------------------- #
 #  FastMCP server
@@ -174,4 +181,19 @@ async def ask_question_about_image(
 #  Entrypoint
 # --------------------------------------------------------------------------- #
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--log-level",
+        type=str,
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        help="Set the logging level.",
+    )
+    args, _ = parser.parse_known_args()
+
+    log_level = args.log_level.upper()
+    logger.setLevel(log_level)
+    for handler in logger.handlers:
+        handler.setLevel(log_level)
+
     mcp.run(transport="stdio")

@@ -14,9 +14,16 @@ Dependencies
 # --------------------------------------------------------------------------- #
 
 from typing import Any, Dict, List, Optional
+import argparse
+from interpreters.logger import get_logger
 
 import httpx
 from mcp.server.fastmcp import FastMCP
+
+# --------------------------------------------------------------------------- #
+#  Logger setup
+# --------------------------------------------------------------------------- #
+logger = get_logger(__name__)
 
 # --------------------------------------------------------------------------- #
 #  FastMCP server instance
@@ -93,6 +100,7 @@ async def search(
         params["time_range"] = time_range
 
     url = f"{host.rstrip('/')}/search"
+    logger.info("Searching for '%s' on %s", query, url)
 
     async with httpx.AsyncClient(timeout=20.0, headers={"User-Agent": "fastmcp-search"}) as client:
         try:
@@ -100,6 +108,7 @@ async def search(
             r.raise_for_status()
             results = r.json().get("results", [])[: num_results]
         except Exception as exc:  # network / JSON / key errors
+            logger.error("Search failed for query '%s': %s", query, exc)
             return [{"title": "Search error", "link": "", "snippet": str(exc)}]
 
     return [
@@ -117,4 +126,19 @@ async def search(
 # --------------------------------------------------------------------------- #
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--log-level",
+        type=str,
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        help="Set the logging level.",
+    )
+    args, _ = parser.parse_known_args()
+
+    log_level = args.log_level.upper()
+    logger.setLevel(log_level)
+    for handler in logger.handlers:
+        handler.setLevel(log_level)
+
     mcp.run(transport="stdio")  # or: mcp.run(host="0.0.0.0", port=5002)

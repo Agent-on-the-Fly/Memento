@@ -9,8 +9,10 @@ that works without the camel package.
 # --------------------------------------------------------------------------- #
 import asyncio, os, io, json, subprocess
 from typing import Tuple, Optional, List, Literal
+import argparse
+import logging
+from interpreters.logger import get_logger
 
-from loguru import logger
 from retry import retry
 
 from mcp.server.fastmcp import FastMCP
@@ -95,7 +97,7 @@ class DocumentProcessingToolkit:
     # --------------------------------------------------------------------- #
     @retry(Exception,tries=5, delay=2, backoff=2)
     def extract_document_content(self, document_path: str) -> Tuple[bool, str]:
-        logger.debug(f"[extract_document_content] {document_path=}")
+        logger.debug("[extract_document_content] document_path=%s", document_path)
 
         # 1. Images ----------------------------------------------------------------
         if document_path.lower().endswith((".jpg", ".jpeg", ".png")):
@@ -112,7 +114,7 @@ class DocumentProcessingToolkit:
             aai.settings.api_key = os.getenv("ASSEMBLYAI_API_KEY")
             config = aai.TranscriptionConfig(speech_model=aai.SpeechModel.best)
             transcript = aai.Transcriber(config=config).transcribe(document_path)
-            logger.info(transcript.text)
+            logger.info("Transcription result: %s", transcript.text)
             if transcript.status == "error":
                 raise RuntimeError(f"Transcription failed: {transcript.error}")
             return True, transcript.text
@@ -214,7 +216,7 @@ class DocumentProcessingToolkit:
             )
             return True, text
         except Exception as e:
-            logger.warning(f"Chunkr failed: {e}")
+            logger.warning("Chunkr failed: %s", e)
             if path.lower().endswith(".pdf"):
                 try:
                     from PyPDF2 import PdfReader
@@ -247,6 +249,11 @@ class DocumentProcessingToolkit:
 
 
 # --------------------------------------------------------------------------- #
+#  Logger setup
+# --------------------------------------------------------------------------- #
+logger = get_logger(__name__)
+
+# --------------------------------------------------------------------------- #
 #  FastMCP server
 # --------------------------------------------------------------------------- #
 mcp = FastMCP("document_processing")
@@ -274,4 +281,19 @@ async def process_document(document_path: str) -> str:
 #  Entrypoint
 # --------------------------------------------------------------------------- #
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--log-level",
+        type=str,
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        help="Set the logging level.",
+    )
+    args, _ = parser.parse_known_args()
+
+    log_level = args.log_level.upper()
+    logger.setLevel(log_level)
+    for handler in logger.handlers:
+        handler.setLevel(log_level)
+
     mcp.run(transport="stdio")

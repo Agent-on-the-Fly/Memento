@@ -20,8 +20,6 @@ import tiktoken
 # ---------------------------------------------------------------------------
 #   Logging setup
 # ---------------------------------------------------------------------------
-LOG_FORMAT = '%(log_color)s%(levelname)-8s%(reset)s %(message)s'
-colorlog.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -156,20 +154,27 @@ def trim_messages(messages: List[Dict[str, str]], max_tokens: int, model="gpt-3.
 class HierarchicalClient:
     MAX_CYCLES = 3
 
-    def __init__(self, meta_model: str, exec_model: str):
+    def __init__(self, meta_model: str, exec_model: str, verbose: bool = False):
         self.meta_llm = OpenAIBackend(meta_model)
         self.exec_llm = OpenAIBackend(exec_model)
         self.sessions: Dict[str, ClientSession] = {}
+        self.verbose = verbose
+        # State variables for step-by-step execution
         self.shared_history: List[Dict[str, str]] = []
+        self.planner_msgs: List[Dict[str, str]] = []
+        self.tasks: List[Dict[str, Any]] = []
+        self.current_task_index: int = 0
+        self.tools_schema: List[Dict[str, Any]] = []
 
     # ---------- Tool management ----------
-    async def connect_to_servers(self, scripts: List[str]):
+    async def connect_to_servers(self, scripts: List[str], log_level: str = "INFO"):
         from contextlib import AsyncExitStack
         self.exit_stack = AsyncExitStack()
         for script in scripts:
             path = Path(script)
             cmd = sys.executable if path.suffix == ".py" else "node"
-            params = StdioServerParameters(command=cmd, args=[str(path)])
+            server_args = [str(path), "--log-level", log_level.upper()]
+            params = StdioServerParameters(command=cmd, args=server_args)
             stdio, write = await self.exit_stack.enter_async_context(stdio_client(params))
             session = await self.exit_stack.enter_async_context(ClientSession(stdio, write))
             await session.initialize()
@@ -177,7 +182,9 @@ class HierarchicalClient:
                 if tool.name in self.sessions:
                     raise RuntimeError(f"Duplicate tool name '{tool.name}'.")
                 self.sessions[tool.name] = session
-        print("Connected tools:", list(self.sessions.keys()))
+        logger.info("Connected tools: %s", list(self.sessions.keys()))
+        self.tools_schema = await self._tools_schema()
+
 
     async def _tools_schema(self) -> List[Dict[str, Any]]:
         result, cached = [], {}
@@ -197,52 +204,97 @@ class HierarchicalClient:
                 )
         return result
 
-    # ---------- Main processing ----------
+    # ---------- Main processing (old, now a wrapper) ----------
     async def process_query(self, query: str, file: str, task_id: str = "interactive") -> str:
-        tools_schema = await self._tools_schema()
-        self.shared_history = []
-        self.shared_history.append({"role": "user", "content": f"{query}\ntask_id: {task_id}\nfile_path: {file}\n"})
-        planner_msgs = [{"role": "system", "content": META_SYSTEM_PROMPT}] + self.shared_history
+        await self.start_query(query, file, task_id)
 
-        for cycle in range(self.MAX_CYCLES):
-            meta_reply = await self.meta_llm.chat(planner_msgs)
-            meta_content = meta_reply["content"] or ""
-            self.shared_history.append({"role": "assistant", "content": meta_content})
+        while True:
+            result = await self.execute_next_step()
+            if result.startswith("FINAL ANSWER:"):
+                return result[len("FINAL ANSWER:"):].strip()
+            # In non-interactive mode, we loop until we get a final answer
+            # or run out of cycles. The logic for MAX_CYCLES is implicitly
+            # handled by the planner calls in execute_next_step.
 
-            if meta_content.startswith("FINAL ANSWER:"):
-                return meta_content[len("FINAL ANSWER:"):].strip()
+    # ---------- Step-by-step processing for interactive mode ----------
+    async def start_query(self, query: str, file: str, task_id: str = "interactive"):
+        self.shared_history = [{"role": "user", "content": f"{query}\ntask_id: {task_id}\nfile_path: {file}\n"}]
+        self.planner_msgs = [{"role": "system", "content": META_SYSTEM_PROMPT}] + self.shared_history
+        self.tasks = []
+        self.current_task_index = 0
 
-            try:
-                tasks = json.loads(_strip_fences(meta_content))["plan"]
-            except Exception as e:
-                return f"[planner error] {e}: {meta_content}"
+        await self._get_new_plan()
 
-            for task in tasks:
-                task_desc = f"Task {task['id']}: {task['description']}"
-                exec_msgs = (
-                    [{"role": "system", "content": EXEC_SYSTEM_PROMPT}] +
-                    self.shared_history +
-                    [{"role": "user", "content": task_desc}]
-                )
-                while True:
-                    exec_msgs = trim_messages(exec_msgs, MAX_CTX, model=EXE_MODEL)
-                    exec_reply = await self.exec_llm.chat(exec_msgs, tools_schema)
-                    if exec_reply["content"]:
-                        result_text = str(exec_reply["content"])
-                        self.shared_history.append({"role": "assistant", "content": f"Task {task['id']} result: {result_text}"})
-                        break
-                    for call in exec_reply.get("tool_calls") or []:
-                        t_name = call["function"]["name"]
-                        t_args = json.loads(call["function"].get("arguments") or "{}")
-                        session = self.sessions[t_name]
-                        result_msg = await session.call_tool(t_name, t_args)
-                        result_text = str(result_msg.content)
-                        exec_msgs.extend([
-                            {"role": "assistant", "content": None, "tool_calls": [call]},
-                            {"role": "tool", "tool_call_id": call["id"], "name": t_name, "content": result_text},
-                        ])
-            planner_msgs = [{"role": "system", "content": META_SYSTEM_PROMPT}] + self.shared_history
-        return meta_content.strip()
+    async def _get_new_plan(self):
+        logger.debug("--- META-PLANNER PROMPT ---\n%s", json.dumps(self.planner_msgs, indent=2))
+        meta_reply = await self.meta_llm.chat(self.planner_msgs)
+        logger.debug("--- META-PLANNER RESPONSE ---\n%s", json.dumps(meta_reply, indent=2))
+        meta_content = meta_reply["content"] or ""
+        self.shared_history.append({"role": "assistant", "content": meta_content})
+
+        if meta_content.startswith("FINAL ANSWER:"):
+            self.tasks = [] # No more tasks
+            return
+
+        try:
+            self.tasks = json.loads(_strip_fences(meta_content))["plan"]
+            self.current_task_index = 0
+        except Exception as e:
+            logger.error("[planner error] %s: %s", e, meta_content)
+            self.tasks = [] # Stop processing on plan error
+
+    async def _execute_task(self, task: Dict[str, Any]) -> str:
+        task_desc = f"Task {task['id']}: {task['description']}"
+        exec_msgs = (
+            [{"role": "system", "content": EXEC_SYSTEM_PROMPT}] +
+            self.shared_history +
+            [{"role": "user", "content": task_desc}]
+        )
+        while True:
+            exec_msgs = trim_messages(exec_msgs, MAX_CTX, model=EXE_MODEL)
+            logger.debug("--- EXECUTOR PROMPT ---\n%s", json.dumps(exec_msgs, indent=2))
+            exec_reply = await self.exec_llm.chat(exec_msgs, self.tools_schema)
+            logger.debug("--- EXECUTOR RESPONSE ---\n%s", json.dumps(exec_reply, indent=2))
+            if exec_reply["content"]:
+                result_text = str(exec_reply["content"])
+                self.shared_history.append({"role": "assistant", "content": f"Task {task['id']} result: {result_text}"})
+                return result_text
+            for call in exec_reply.get("tool_calls") or []:
+                t_name = call["function"]["name"]
+                t_args = json.loads(call["function"].get("arguments") or "{}")
+                logger.debug("--- TOOL CALL ---\nName: %s\nArguments: %s", t_name, t_args)
+                session = self.sessions[t_name]
+                result_msg = await session.call_tool(t_name, t_args)
+                result_text = str(result_msg.content)
+                logger.debug("--- TOOL RESULT ---\n%s", result_text)
+                exec_msgs.extend([
+                    {"role": "assistant", "content": None, "tool_calls": [call]},
+                    {"role": "tool", "tool_call_id": call["id"], "name": t_name, "content": result_text},
+                ])
+
+    async def execute_next_step(self) -> str:
+        if not self.tasks or self.current_task_index >= len(self.tasks):
+            # All tasks in the current plan are done, or there was no plan
+            self.planner_msgs = [{"role": "system", "content": META_SYSTEM_PROMPT}] + self.shared_history
+            await self._get_new_plan()
+            # After getting a new plan, check if it's a final answer
+            last_message = self.shared_history[-1]["content"]
+            if last_message.startswith("FINAL ANSWER:"):
+                return last_message
+            if not self.tasks:
+                return "Agent finished without a final answer, or the plan was empty."
+
+        # Execute the current task
+        task = self.tasks[self.current_task_index]
+        result = await self._execute_task(task)
+        self.current_task_index += 1
+        return f"Task {task['id']} result: {result}"
+
+    def add_user_interjection(self, message: str):
+        self.shared_history.append({"role": "user", "content": message})
+        # Force a new plan to be generated on the next step
+        self.tasks = []
+        self.current_task_index = 0
 
     async def cleanup(self):
         if hasattr(self, "exit_stack"):
@@ -258,6 +310,18 @@ def parse_args():
     parser.add_argument("-f", "--file", type=str, default="", help="Optional file path")
     parser.add_argument("-m", "--meta_model", type=str, default="gpt-4.1", help="Meta‑planner model")
     parser.add_argument("-e", "--exec_model", type=str, default="o3-2025-04-16", help="Executor model")
+    parser.add_argument(
+        "--log-level",
+        type=str,
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        help="Set the logging level.",
+    )
+    parser.add_argument(
+        "-v", "--verbose",
+        action="store_true",
+        help="Enable verbose logging, including prompts and responses.",
+    )
     parser.add_argument("-s", "--servers", type=str, nargs="*", default=[
         "server/code_agent.py",
         "server/craw_page.py",
@@ -290,9 +354,25 @@ async def run_single_query(client: HierarchicalClient, question: str, file_path:
     print("\nFINAL ANSWER:", answer)
 
 async def main_async(args):
+    log_level = "DEBUG" if args.verbose else args.log_level.upper()
+    handler = colorlog.StreamHandler()
+    handler.setFormatter(colorlog.ColoredFormatter(
+        '%(log_color)s%(levelname)-8s%(reset)s %(message)s',
+        log_colors={
+            'DEBUG':    'cyan',
+            'INFO':     'green',
+            'WARNING':  'yellow',
+            'ERROR':    'red',
+            'CRITICAL': 'red,bg_white',
+        }
+    ))
+    root_logger = logging.getLogger()
+    root_logger.addHandler(handler)
+    root_logger.setLevel(log_level)
+
     load_dotenv()
-    client = HierarchicalClient(args.meta_model, args.exec_model)
-    await client.connect_to_servers(args.servers)
+    client = HierarchicalClient(args.meta_model, args.exec_model, verbose=args.verbose)
+    await client.connect_to_servers(args.servers, log_level=args.log_level)
 
     try:
         if args.question:
@@ -304,7 +384,20 @@ async def main_async(args):
                 if q.lower() in {"exit", "quit", "q"}:
                     break
                 f = input("File path (optional): ").strip()
-                await run_single_query(client, q, f)
+
+                await client.start_query(q, f)
+
+                while True:
+                    result = await client.execute_next_step()
+                    print(f"\n{result}")
+
+                    if result.startswith("FINAL ANSWER:") or "Agent finished" in result:
+                        break
+
+                    interjection = input("\nPress Enter to continue, or type your message to interject... ").strip()
+                    if interjection:
+                        client.add_user_interjection(interjection)
+
     finally:
         await client.cleanup()
 

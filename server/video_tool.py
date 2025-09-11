@@ -18,6 +18,8 @@ import os
 import tempfile
 from pathlib import Path
 from typing import List
+import argparse
+from interpreters.logger import get_logger
 
 import ffmpeg
 import yt_dlp
@@ -32,6 +34,11 @@ from dotenv import load_dotenv
 
 
 load_dotenv()  # picks up OPENAI_* variables from .env if present
+
+# --------------------------------------------------------------------------- #
+#  Logger setup
+# --------------------------------------------------------------------------- #
+logger = get_logger(__name__)
 
 # --------------------------------------------------------------------------- #
 #  OpenAI client (async)                                                      #
@@ -149,13 +156,16 @@ async def download_video(url: str, download_directory: str | None = None) -> str
     Returns:
     - str: The full file path of the downloaded video file.
     """
+    logger.info("Downloading video from URL: %s", url)
     download_directory = download_directory or tempfile.mkdtemp()
     Path(download_directory).mkdir(parents=True, exist_ok=True)
     template = str(Path(download_directory) / "%(title)s.%(ext)s")
     opts = {"format": "bestvideo+bestaudio/best", "outtmpl": template}
     with yt_dlp.YoutubeDL(opts) as ydl:
         info = ydl.extract_info(url, download=True)
-        return ydl.prepare_filename(info)
+        filename = ydl.prepare_filename(info)
+        logger.info("Downloaded video to: %s", filename)
+        return filename
 
 
 @mcp.tool()
@@ -254,4 +264,19 @@ async def ask_question_about_video(
 # --------------------------------------------------------------------------- #
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--log-level",
+        type=str,
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        help="Set the logging level.",
+    )
+    args, _ = parser.parse_known_args()
+
+    log_level = args.log_level.upper()
+    logger.setLevel(log_level)
+    for handler in logger.handlers:
+        handler.setLevel(log_level)
+
     mcp.run(transport="stdio")

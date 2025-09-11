@@ -8,10 +8,12 @@ FastMCP server – Excel/CSV extraction → Markdown (no camel dependency)
 # --------------------------------------------------------------------------- #
 import os
 from typing import Optional, Tuple
+import argparse
+import logging
+from interpreters.logger import get_logger
 
 import anyio
 import pandas as pd
-from loguru import logger
 from mcp.server.fastmcp import FastMCP
 
 
@@ -33,7 +35,7 @@ class ExcelToolkit:
         if not document_path.lower().endswith((".xls", ".xlsx", ".csv")):
             raise ValueError("Only .xls, .xlsx or .csv files are supported.")
 
-        logger.info(f"Processing Excel/CSV file: {document_path}")
+        logger.info("Processing Excel/CSV file: %s", document_path)
 
         if document_path.lower().endswith(".csv"):
             return self._handle_csv(document_path)
@@ -45,7 +47,7 @@ class ExcelToolkit:
             out_path = document_path.rsplit(".", 1)[0] + ".xlsx"
             XLS2XLSX(document_path).to_xlsx(out_path)
             document_path = out_path
-            logger.debug(f"Converted .xls → .xlsx : {out_path}")
+            logger.debug("Converted .xls -> .xlsx : %s", out_path)
 
         return self._handle_xlsx(document_path)
 
@@ -54,7 +56,7 @@ class ExcelToolkit:
         try:
             df = pd.read_csv(path)
         except Exception as e:
-            logger.error(f"CSV read failed: {e}")
+            logger.error("CSV read failed: %s", e)
             raise
 
         return "CSV File Processed:\n" + self._df_to_md(df)
@@ -112,6 +114,11 @@ class ExcelToolkit:
 
 
 # --------------------------------------------------------------------------- #
+#  Logger setup
+# --------------------------------------------------------------------------- #
+logger = get_logger(__name__)
+
+# --------------------------------------------------------------------------- #
 #  FastMCP server
 # --------------------------------------------------------------------------- #
 mcp = FastMCP("excel_toolkit")
@@ -137,4 +144,19 @@ async def extract_excel_content(document_path: str) -> str:
 #  Entrypoint
 # --------------------------------------------------------------------------- #
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--log-level",
+        type=str,
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        help="Set the logging level.",
+    )
+    args, _ = parser.parse_known_args()
+
+    log_level = args.log_level.upper()
+    logger.setLevel(log_level)
+    for handler in logger.handlers:
+        handler.setLevel(log_level)
+
     mcp.run(transport="stdio")

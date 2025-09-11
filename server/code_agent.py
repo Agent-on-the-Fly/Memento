@@ -51,6 +51,7 @@ import asyncio
 import json
 import logging
 import os
+import argparse
 import shutil
 import uuid
 import datetime
@@ -73,6 +74,7 @@ from interpreters.interpreters import (
     JupyterKernelInterpreter,
     SubprocessInterpreter,
 )
+from interpreters.logger import get_logger
 
 # --------------------------------------------------------------------------- #
 #  Default import whitelist configuration
@@ -237,15 +239,7 @@ def _truncate_text(text: str, max_tokens: int, filename: str = "") -> str:
 #  Logger setup
 # --------------------------------------------------------------------------- #
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('code_tool.log'),
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # --------------------------------------------------------------------------- #
 #  FastMCP server instance
@@ -1202,4 +1196,19 @@ def _format_file_size(size_bytes: int) -> str:
 # --------------------------------------------------------------------------- #
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--log-level",
+        type=str,
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        help="Set the logging level.",
+    )
+    args, _ = parser.parse_known_args()
+
+    log_level = args.log_level.upper()
+    logger.setLevel(log_level)
+    for handler in logger.handlers:
+        handler.setLevel(log_level)
+
     mcp.run(transport="stdio")
