@@ -2,6 +2,7 @@ from __future__ import annotations
 import asyncio
 import argparse
 import os
+import sys
 import uuid
 from pathlib import Path
 from typing import Dict, Any, List
@@ -167,7 +168,7 @@ class HierarchicalClient:
         self.exit_stack = AsyncExitStack()
         for script in scripts:
             path = Path(script)
-            cmd = "python" if path.suffix == ".py" else "node"
+            cmd = sys.executable if path.suffix == ".py" else "node"
             params = StdioServerParameters(command=cmd, args=[str(path)])
             stdio, write = await self.exit_stack.enter_async_context(stdio_client(params))
             session = await self.exit_stack.enter_async_context(ClientSession(stdio, write))
@@ -258,14 +259,23 @@ def parse_args():
     parser.add_argument("-m", "--meta_model", type=str, default="gpt-4.1", help="Meta‑planner model")
     parser.add_argument("-e", "--exec_model", type=str, default="o3-2025-04-16", help="Executor model")
     parser.add_argument("-s", "--servers", type=str, nargs="*", default=[
-        "../server/code_agent.py",
-        "../server/craw_page.py",
-        "../server/documents_tool.py",
-        "../server/excel_tool.py",
-        "../server/image_tool.py",
-        "../server/math_tool.py",
-        "../server/search_tool.py",
-        "../server/video_tool.py",
+        "server/code_agent.py",
+        "server/craw_page.py",
+        "server/documents_tool.py",
+        "server/excel_tool.py",
+        "server/image_tool.py",
+        "server/math_tool.py",
+        "server/search_tool.py",
+        "server/video_tool.py",
+        "server/github_tool.py",
+        "server/plotting_tool.py",
+        "server/weather_tool.py",
+        "server/news_tool.py",
+        "server/calendar_tool.py",
+        "server/system_tool.py",
+        "server/pdf_generator_tool.py",
+        "server/database_tool.py",
+        "server/human_tool.py",
     ], help="Paths of tool server scripts")
     return parser.parse_args()
 
