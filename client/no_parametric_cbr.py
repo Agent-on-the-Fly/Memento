@@ -124,7 +124,7 @@ if AGENTFLY_DIR not in sys.path:
 try:
     from memory.np_memory import load_jsonl as mem_load_jsonl, extract_pairs as mem_extract_pairs, retrieve as mem_retrieve
 except Exception as _e:
-    mem_load_jsonl = mem_extract_pairs = mem_retrieve = None  
+    mem_load_jsonl = mem_extract_pairs = mem_retrieve = None
     logger.warning("Memory retriever not available: %s", _e)
 
 def build_prompt_from_cases(task_text: str, retrieved_cases: list[dict] | None, original_items: list[dict] | None) -> str:
@@ -192,7 +192,7 @@ def log_block(title: str, content: Any):
 
 
 def _count_tokens(msg: Dict[str, str], enc) -> int:
-    role_tokens = 4  
+    role_tokens = 4
     content = msg.get("content") or ""
     return role_tokens + len(enc.encode(content))
 
@@ -220,11 +220,15 @@ class ChatBackend:
 
 
 class OpenAIBackend(ChatBackend):
-    def __init__(self, model: str):
+    def __init__(self, model: str, is_azure: bool):
         self.model = model
         self.client = AsyncOpenAI(
             api_key=os.getenv("OPENAI_API_KEY"),
             base_url=os.getenv("OPENAI_BASE_URL"),
+        ) if not is_azure else AsyncAzureOpenAI(
+            api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+            api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
+            azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
         )
 
     @retry(
@@ -252,7 +256,7 @@ class OpenAIBackend(ChatBackend):
             payload["tool_choice"] = tool_choice
 
         try:
-            resp = await self.client.chat.completions.create(**payload)  
+            resp = await self.client.chat.completions.create(**payload)
         except Exception as e:
             logger.error(f"OpenAI API call attempt {current_attempt} failed with error: {type(e).__name__} - {e}")
             raise
@@ -301,7 +305,7 @@ class QueryRecord:
     task_id: str
     query: str
     model_output: str
-    plan_json: str  
+    plan_json: str
     meta_trace: List[MetaCycle]
     executor_trace: List[ExecStep]
     tool_history: List[ToolCallRecord]
@@ -312,9 +316,9 @@ MAX_TURNS_MEMORY = 50
 class HierarchicalClient:
     MAX_CYCLES = 3
 
-    def __init__(self, meta_model: str, exec_model: str):
-        self.meta_llm = OpenAIBackend(meta_model)
-        self.exec_llm = OpenAIBackend(exec_model)
+    def __init__(self, meta_model: str, exec_model: str, is_azure: bool):
+        self.meta_llm = OpenAIBackend(meta_model, is_azure)
+        self.exec_llm = OpenAIBackend(exec_model, is_azure)
         self.exit_stack = AsyncExitStack()
         self.sessions: Dict[str, ClientSession] = {}
         self.shared_history: List[Dict[str, str]] = []
@@ -396,9 +400,9 @@ class HierarchicalClient:
         tools_schema = await self._tools_schema()
 
         self._add_to_history("user", query)
-      
+
         mem_prompt = self._memory_prompt_for(query)
-    
+
         if mem_prompt:
             self._add_to_history("user", mem_prompt)
 
@@ -408,7 +412,7 @@ class HierarchicalClient:
         executor_trace: List[ExecStep] = []
         tool_history: List[ToolCallRecord] = []
         final_answer: str = ""
-        latest_plan_json: str = ""  
+        latest_plan_json: str = ""
 
         for cycle in range(self.MAX_CYCLES):
             meta_reply = await self.meta_llm.chat(planner_msgs)
@@ -422,7 +426,7 @@ class HierarchicalClient:
 
             try:
                 stripped = _strip_fences(meta_content)
-                _ = json.loads(stripped)["plan"] 
+                _ = json.loads(stripped)["plan"]
                 latest_plan_json = stripped
             except Exception as e:
                 final_answer = f"[planner error] {e}: {meta_content}"
@@ -540,6 +544,7 @@ async def main():
     client = HierarchicalClient(
         os.getenv("META_MODEL", "gpt-4.1"),
         os.getenv("EXEC_MODEL", "o4-mini"),
+        os.getenv("USE_AZURE_OPENAI") == "True",
     )
     await client.connect_to_servers(server_paths)
 
@@ -561,7 +566,7 @@ async def main():
                 rec_dict = asdict(rec)
                 rec_dict.update({
                     "question": q,
-                    "plan": rec.plan_json,             
+                    "plan": rec.plan_json,
                     "ground_truth": gt,
                     "pred_answer": pred_answer,
                     "judgement": judge_res["judgement"],
@@ -579,19 +584,19 @@ async def main():
                 continue
 
             try:
-                mem_path = MEMORY_JSONL_PATH  
+                mem_path = MEMORY_JSONL_PATH
                 os.makedirs(os.path.dirname(mem_path), exist_ok=True)
 
                 mem_entry = {
                     "question": q,
-                    "plan": rec.plan_json or "",  
-                    "reward": reward             
+                    "plan": rec.plan_json or "",
+                    "reward": reward
                 }
                 with open(mem_path, "a", encoding="utf-8") as mf:
                     mf.write(json.dumps(mem_entry, ensure_ascii=False) + "\n")
             except Exception as e:
                 logger.warning("Failed to write memory file: %s", e)
-                
+
     finally:
         await client.cleanup()
 

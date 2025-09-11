@@ -42,7 +42,7 @@
 - [2025.08.28] We’ve created a Discord server to make discussions and collaboration around this project easier. Feel free to join and share your thoughts, ask questions, or contribute ideas! 🔥 🔥 🔥 [Join our Discord!](https://discord.gg/y4FP2EDXyX)
 - [2025.08.27] Thanks for your interest in our work! We’ll release our CBR code next week and our Parametric Memory code next month. We’ll keep updating on our further development.
 - [2025.08.27] We add a new Crawler MCP in ```server/ai_crawler.py``` for web crawling and query-aware content compression to reduce token cost.
-- [2025.08.26] We add the SerpAPI (https://serpapi.com/search-api) MCP tool to help you avoid using the search Docker and speed up development. 
+- [2025.08.26] We add the SerpAPI (https://serpapi.com/search-api) MCP tool to help you avoid using the search Docker and speed up development.
 
 ## 🔥 Key Features
 
@@ -151,9 +151,17 @@ playwright install
 After creating the `.env` file, you need to configure the following API keys and service endpoints:
 
 ```bash
-# OPENAI API
+#===========================================
+# OpenAI API Configuration
+#===========================================
+USE_AZURE_OPENAI=False
+
 OPENAI_API_KEY=your_openai_api_key_here
 OPENAI_BASE_URL=https://api.openai.com/v1  # or your custom endpoint
+
+AZURE_OPENAI_API_KEY=your_azure_openai_api_key_here
+AZURE_OPENAI_API_VERSION=your_azure_openai_api_version_here
+AZURE_OPENAI_ENDPOINT=your_azure_openai_endpoint_here
 
 #===========================================
 # Tools & Services API
@@ -164,7 +172,7 @@ CHUNKR_API_KEY=your_chunkr_api_key_here
 # Jina API
 JINA_API_KEY=your_jina_api_key_here
 
-# ASSEMBLYAI API 
+# ASSEMBLYAI API
 ASSEMBLYAI_API_KEY=your_assemblyai_api_key_here
 ```
 
@@ -173,7 +181,7 @@ ASSEMBLYAI_API_KEY=your_assemblyai_api_key_here
 
 ### SearxNG Setup
 
-For web search capabilities, set up SearxNG: 
+For web search capabilities, set up SearxNG:
 You can follow https://github.com/searxng/searxng-docker/ to set the docker and use our setting.
 
 ```bash
@@ -287,7 +295,7 @@ class CustomInterpreter(BaseInterpreter):
 ### Upcoming Features & Improvements
 
 - [ ] **Add Case Bank Reasoning**: Implement memory-based case retrieval and reasoning system
-- [ ] **Add User Personal Memory Mechanism**: Implement user-preference search 
+- [ ] **Add User Personal Memory Mechanism**: Implement user-preference search
 - [ ] **Refine Tools & Add More Tools**: Enhance existing tools and expand the tool ecosystem
 - [ ] **Test More New Benchmarks**: Evaluate performance on additional benchmark datasets
 
@@ -313,7 +321,7 @@ If Memento helps your work, please cite:
 
 ```bibtex
 @article{zhou2025mementofinetuningllmagents,
-      title={Memento: Fine-tuning LLM Agents without Fine-tuning LLMs}, 
+      title={Memento: Fine-tuning LLM Agents without Fine-tuning LLMs},
       author={Huichi Zhou and Yihang Chen and Siyuan Guo and Xue Yan and Kin Hei Lee and Zihan Wang and Ka Yiu Lee and Guchun Zhang and Kun Shao and Linyi Yang and Jun Wang},
       journal={arXiv preprint arXiv: 2508.16153},
       url={https://arxiv.org/abs/2508.16153},

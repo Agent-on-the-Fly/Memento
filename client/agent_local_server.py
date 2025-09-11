@@ -79,11 +79,11 @@ class ChatBackend:
 
 class OpenAIBackend(ChatBackend):
     """OpenAI API backend for chat completions with retry logic."""
-    
-    def __init__(self, model: str):
+
+    def __init__(self, model: str, is_azure: bool):
         """
         Initialize OpenAI backend with specified model.
-        
+
         Args:
             model: The OpenAI model to use (e.g., 'gpt-4', 'o3')
         """
@@ -92,6 +92,10 @@ class OpenAIBackend(ChatBackend):
         self.client = AsyncOpenAI(
             api_key=os.getenv("OPENAI_API_KEY"),
             base_url=os.getenv("OPENAI_BASE_URL"),
+        ) if not is_azure else AsyncAzureOpenAI(
+            api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+            api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
+            azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
         )
 
     @retry(
@@ -109,16 +113,16 @@ class OpenAIBackend(ChatBackend):
     ) -> Dict[str, Any]:
         """
         Send chat completion request to OpenAI with optional tool calling.
-        
+
         Args:
             messages: List of message dictionaries with role and content
             tools: Optional list of available tools for function calling
             tool_choice: How to handle tool selection ('auto', 'none', or specific tool)
             max_tokens: Maximum tokens in the response
-            
+
         Returns:
             Dictionary containing response content and tool calls if any
-            
+
         Raises:
             Various OpenAI API errors (handled by retry decorator)
         """
@@ -131,11 +135,11 @@ class OpenAIBackend(ChatBackend):
         if tools:
             payload["tools"] = tools
             payload["tool_choice"] = tool_choice
-            
+
         # Make API call to OpenAI
         resp = await self.client.chat.completions.create(**payload)  # type: ignore[arg-type]
         msg = resp.choices[0].message
-        
+
         # Extract tool calls if present
         raw_calls = getattr(msg, "tool_calls", None)
         tool_calls = None
@@ -197,7 +201,7 @@ class DirectModelBackend(ChatBackend):
         tool_choice: str | None = "auto",
         max_tokens: int = 10240,
     ) -> Dict[str, Any]:
-        
+
         client = AsyncOpenAI(base_url=self.server_url, api_key=self.api_key)
 
         payload: Dict[str, Any] = {
@@ -260,10 +264,10 @@ MAX_TURNS_MEMORY = 50
 def _strip_fences(text: str) -> str:
     """
     Remove markdown code fences and extract JSON content.
-    
+
     Args:
         text: Text that may contain markdown fences or JSON
-        
+
     Returns:
         Cleaned text with fences removed
     """
@@ -281,11 +285,11 @@ def _strip_fences(text: str) -> str:
 def _count_tokens(msg: Dict[str, str], enc) -> int:
     """
     Count tokens in a message for context management.
-    
+
     Args:
         msg: Message dictionary with role and content
         enc: Tokenizer encoding object
-        
+
     Returns:
         Number of tokens in the message
     """
@@ -296,10 +300,10 @@ def _count_tokens(msg: Dict[str, str], enc) -> int:
 def _get_tokenizer(model: str):
     """
     Return a tokenizer for the specified model.
-    
+
     Args:
         model: Model name to get tokenizer for
-        
+
     Returns:
         Tokenizer encoding object, falls back to cl100k_base if model unknown
     """
@@ -307,31 +311,31 @@ def _get_tokenizer(model: str):
         return tiktoken.encoding_for_model(model)
     except KeyError:
         return tiktoken.get_encoding("cl100k_base")
-    
+
 def trim_messages(messages: List[Dict[str, str]], max_tokens: int, model="gpt-3.5-turbo"):
     """
     Trim message history to fit within token limit while preserving system message.
-    
+
     Args:
         messages: List of message dictionaries
         max_tokens: Maximum allowed tokens
         model: Model name for token counting
-        
+
     Returns:
         Trimmed list of messages that fit within token limit
     """
     enc = _get_tokenizer(model)
     total = sum(_count_tokens(m, enc) for m in messages) + 2
-    
+
     # If already within limit, return as is
     if total <= max_tokens:
         return messages
-        
+
     # Always keep system message (first message)
     system_msg = messages[0]
     kept: List[Dict[str, str]] = [system_msg]
     total = _count_tokens(system_msg, enc) + 2
-    
+
     # Add messages from most recent to oldest until limit is reached
     for msg in reversed(messages[1:]):
         t = _count_tokens(msg, enc)
@@ -344,31 +348,31 @@ def trim_messages(messages: List[Dict[str, str]], max_tokens: int, model="gpt-3.
 class HierarchicalClient:
     """
     Main client class that orchestrates the hierarchical AI system.
-    
+
     Manages communication between meta-planner and executor agents,
     handles tool connections, and processes user queries through
     multiple planning and execution cycles.
     """
-    
+
     # Maximum number of planning cycles before giving up
     MAX_CYCLES = 3
 
-    def __init__(self, meta_model: str, exec_model: str):
+    def __init__(self, meta_model: str, exec_model: str, is_azure: bool):
         """
         Initialize the hierarchical client.
-        
+
         Args:
             meta_model: Model name for the meta-planner agent
             exec_model: Model name for the executor agent
         """
-        self.meta_llm = OpenAIBackend(meta_model)
+        self.meta_llm = OpenAIBackend(meta_model, is_azure)
 
         if exec_model.lower().startswith("qwen3"):
             self.exec_llm = DirectModelBackend(model=exec_model)
         else:
-            self.exec_llm = OpenAIBackend(exec_model)
+            self.exec_llm = OpenAIBackend(exec_model, is_azure)
 
-        self.exec_model = exec_model  
+        self.exec_model = exec_model
         self.sessions: Dict[str, ClientSession] = {}
         self.shared_history: List[Dict[str, str]] = []
 
@@ -403,39 +407,39 @@ class HierarchicalClient:
     async def connect_to_servers(self, scripts: List[str]):
         """
         Connect to MCP tool servers specified by script paths.
-        
+
         Args:
             scripts: List of paths to tool server scripts
-            
+
         Raises:
             RuntimeError: If duplicate tool names are found
         """
         from contextlib import AsyncExitStack
         self.exit_stack = AsyncExitStack()
-        
+
         for script in scripts:
             path = Path(script)
             # Determine command based on file extension
             cmd = "python" if path.suffix == ".py" else "node"
             params = StdioServerParameters(command=cmd, args=[str(path)])
-            
+
             # Create stdio client and session
             stdio, write = await self.exit_stack.enter_async_context(stdio_client(params))
             session = await self.exit_stack.enter_async_context(ClientSession(stdio, write))
             await session.initialize()
-            
+
             # Register tools from this session
             for tool in (await session.list_tools()).tools:
                 if tool.name in self.sessions:
                     raise RuntimeError(f"Duplicate tool name '{tool.name}'.")
                 self.sessions[tool.name] = session
-                
+
         print("Connected tools:", list(self.sessions.keys()))
 
     async def _tools_schema(self) -> List[Dict[str, Any]]:
         """
         Get the schema for all available tools in a format suitable for OpenAI.
-        
+
         Returns:
             List of tool schemas in OpenAI function calling format
         """
@@ -444,7 +448,7 @@ class HierarchicalClient:
             # Cache tool listings to avoid repeated calls
             tools_resp = cached.get(id(session)) or await session.list_tools()
             cached[id(session)] = tools_resp
-            
+
             # Convert MCP tool format to OpenAI function calling format
             for tool in tools_resp.tools:
                 result.append(
@@ -463,26 +467,26 @@ class HierarchicalClient:
     async def process_query(self, query: str, file: str, task_id: str = "interactive") -> str:
         """
         Process a user query through the hierarchical AI system.
-        
+
         This is the main method that:
         1. Gets the meta-planner to break down the query into tasks
         2. Executes each task using the executor agent
         3. Continues planning cycles until a final answer is reached
-        
+
         Args:
             query: User's question or request
             file: Optional file path context
             task_id: Unique identifier for this query session
-            
+
         Returns:
             Final answer to the user's query
         """
         tools_schema = await self._tools_schema()
         self.shared_history = []
-        
+
         # Initialize conversation with user query
         self.shared_history.append({
-            "role": "user", 
+            "role": "user",
             "content": f"{query}\ntask_id: {task_id}\nfile_path: {file}\n"
         })
         planner_msgs = [{"role": "system", "content": META_SYSTEM_PROMPT}] + self.shared_history
@@ -512,22 +516,22 @@ class HierarchicalClient:
                     self.shared_history +
                     [{"role": "user", "content": task_desc}]
                 )
-                
+
                 # Execute task with potential tool calls
                 while True:
                     # Trim messages to fit within token limit
                     exec_msgs = trim_messages(exec_msgs, MAX_CTX, model=EXE_MODEL)
                     exec_reply = await self.exec_llm.chat(exec_msgs, tools_schema)
-                    
+
                     # If executor has a direct response, use it
                     if exec_reply["content"]:
                         result_text = str(exec_reply["content"])
                         self.shared_history.append({
-                            "role": "assistant", 
+                            "role": "assistant",
                             "content": f"Task {task['id']} result: {result_text}"
                         })
                         break
-                        
+
                     # Handle tool calls from executor
                     for call in exec_reply.get("tool_calls") or []:
                         t_name = call["function"]["name"]
@@ -561,7 +565,7 @@ class HierarchicalClient:
 
             # Update planner messages with execution results for next cycle
             planner_msgs = [{"role": "system", "content": META_SYSTEM_PROMPT}] + self.shared_history
-            
+
         # If we've exhausted cycles, return the last meta-planner response
         return meta_content.strip()
 
@@ -577,7 +581,7 @@ class HierarchicalClient:
 def parse_args():
     """
     Parse command line arguments for the AgentFly client.
-    
+
     Returns:
         Parsed arguments namespace
     """
@@ -599,7 +603,7 @@ def parse_args():
 async def run_single_query(client: HierarchicalClient, question: str, file_path: str):
     """
     Execute a single query and display the result.
-    
+
     Args:
         client: Initialized HierarchicalClient instance
         question: User's question
@@ -611,16 +615,16 @@ async def run_single_query(client: HierarchicalClient, question: str, file_path:
 async def main_async(args):
     """
     Main async function that sets up and runs the AgentFly client.
-    
+
     Args:
         args: Parsed command line arguments
     """
     # Load environment variables (API keys, etc.)
     load_dotenv()
-    
+
     # Initialize the hierarchical client
-    client = HierarchicalClient(args.meta_model, args.exec_model)
-    
+    client = HierarchicalClient(args.meta_model, args.exec_model, os.getenv("USE_AZURE_OPENAI") == "True")
+
     # Connect to tool servers
     await client.connect_to_servers(args.servers)
 
