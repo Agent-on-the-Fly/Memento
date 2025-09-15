@@ -594,6 +594,15 @@ async def main():
                 }
                 with open(mem_path, "a", encoding="utf-8") as mf:
                     mf.write(json.dumps(mem_entry, ensure_ascii=False) + "\n")
+
+
+                if mem_load_jsonl and mem_extract_pairs:
+                    client._memory_items = mem_load_jsonl(mem_path)
+                    client._memory_pairs = mem_extract_pairs(
+                        client._memory_items,
+                        MEMORY_KEY_FIELD,
+                        MEMORY_VALUE_FIELD
+                    )
             except Exception as e:
                 logger.warning("Failed to write memory file: %s", e)
 
