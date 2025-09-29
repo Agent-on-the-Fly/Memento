@@ -8,8 +8,10 @@ colorama==0.4.6
 loguru==0.7.3
 retry==0.9.2 
 pandas==2.2.3
-ffmpeg==7.1.1
 yt_dlp
+torch
+torchvision
+transformers
 opencv-python==4.11.0.86
 scenedetect==0.6.6 
 assemblyai==0.40.2  
