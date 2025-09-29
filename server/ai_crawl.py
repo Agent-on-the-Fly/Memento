@@ -1,4 +1,4 @@
-import os
+import os, time, asyncio
 import logging
 from typing import Dict, Any, List
 from dotenv import load_dotenv
@@ -21,6 +21,12 @@ logger = logging.getLogger("mcp.crawl_extract")
 # --------------------------------------------------------------------------- #
 DEFAULT_MODEL = "gpt-4.1"
 
+# Customizable Parameters
+RATE_LIMIT = 10
+RATE_INTERVAL = 60
+
+load_dotenv()
+
 EXTRACTOR_SYSTEM_PROMPT = (
     "You are a careful, concise information extraction assistant. "
     "Given a user query and a webpage in Markdown, do NOT summarize the whole page. "
@@ -35,6 +41,25 @@ EXTRACTOR_SYSTEM_PROMPT = (
 )
 
 # --------------------------------------------------------------------------- #
+#  Rate Limiting
+# --------------------------------------------------------------------------- #
+class RateLimiting:
+    def __init__(self, max_calls: int, interval: int):
+        self.max_calls = max_calls
+        self.interval = interval
+        self.calls = []
+        self.lock = asyncio.Lock()
+
+    async def acquire(self):
+        async with self.lock:
+            now = time.time()
+            self.calls = [t for t in self.calls if now - t < self.interval]
+            if len(self.calls) >= self.max_calls:
+                raise RuntimeError(f"Rate limit exceeded. Max calls: {self.max_calls}, Interval: {self.interval} ")
+            self.calls.append(now)
+
+rate_limiter = RateLimiting(RATE_LIMIT, RATE_INTERVAL)
+# --------------------------------------------------------------------------- #
 #  Chat backend
 # --------------------------------------------------------------------------- #
 class OpenAIBackend:
@@ -42,7 +67,7 @@ class OpenAIBackend:
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise RuntimeError("Missing OPENAI_API_KEY environment variable.")
-        base_url = os.getenv("OPENAI_BASE_URL")
+        base_url = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
         self.model = DEFAULT_MODEL  
         self.client = AsyncOpenAI(api_key=api_key, base_url=base_url)
 
@@ -91,6 +116,7 @@ async def _crawl_markdown(url: str) -> str:
         result = await crawler.arun(url=url)
         md = (result.markdown or "").strip()
         if not md:
+            raise RuntimeError(f"No markdown extracted from {url}")
             return result
         return md
 
@@ -149,6 +175,8 @@ async def crawl_extract(
     - Exposed as the single MCP tool.
     - The underlying model is fixed to 'gpt-4.1'.
     """
+    await rate_limiter.acquire()
+
     return await _crawl_and_extract(
         url=url,
         query=query,
