@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from openai import AsyncOpenAI
+from openai import AsyncAzureOpenAI
 
 import tiktoken
 from typing import List, Dict
