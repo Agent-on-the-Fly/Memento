@@ -19,7 +19,7 @@ from typing import Dict, Any, List
 from dotenv import load_dotenv
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, AsyncAzureOpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential, before_sleep_log
 import logging
 import colorlog
@@ -312,7 +312,7 @@ def _get_tokenizer(model: str):
     except KeyError:
         return tiktoken.get_encoding("cl100k_base")
 
-def trim_messages(messages: List[Dict[str, str]], max_tokens: int, model="gpt-3.5-turbo"):
+def trim_messages(messages: List[Dict[str, str]], max_tokens: int, model="gpt-3.5-turbo") -> List[Dict[str, str]]:
     """
     Trim message history to fit within token limit while preserving system message.
 

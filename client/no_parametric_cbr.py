@@ -225,7 +225,7 @@ class OpenAIBackend(ChatBackend):
         self.model = model
         self.client = AsyncOpenAI(
             api_key=os.getenv("OPENAI_API_KEY"),
-            base_url=os.getenv("OPENAI_BASE_URL"),
+            base_url=os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
         ) if not is_azure else AsyncAzureOpenAI(
             api_key=os.getenv("AZURE_OPENAI_API_KEY"),
             api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
@@ -433,7 +433,7 @@ class HierarchicalClient:
                 final_answer = f"[planner error] {e}: {meta_content}"
                 break
 
-            # 执行任务
+            # Perform tasks
             tasks = json.loads(latest_plan_json)["plan"]
             for task in tasks:
                 task_desc = f"Task {task['id']}: {task['description']}"
@@ -486,7 +486,7 @@ class HierarchicalClient:
 
 JUDGE_CLIENT = AsyncOpenAI(
     api_key=os.getenv("OPENAI_API_KEY"),
-    base_url=os.getenv("OPENAI_BASE_URL"),
+    base_url=os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
 )
 
 def _ensure_list(x: Any) -> List[str]:
