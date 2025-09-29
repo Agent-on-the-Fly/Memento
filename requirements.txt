@@ -18,4 +18,5 @@ assemblyai==0.40.2
 python-pptx==1.0.2  
 docx2markdown==0.1.1    
 chunkr_ai
+serpapi
 xmltodict==0.14.2
