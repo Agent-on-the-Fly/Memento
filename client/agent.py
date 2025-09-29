@@ -9,7 +9,7 @@ from typing import Dict, Any, List
 from dotenv import load_dotenv
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, AsyncAzureOpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential, before_sleep_log
 import logging
 import colorlog
@@ -37,7 +37,7 @@ META_SYSTEM_PROMPT = (
     "FINAL ANSWER: <answer>\n\n" \
     " YOUR FINAL ANSWER should be a number OR as few words as possible OR a comma separated list of numbers and/or strings. If you are asked for a number, don't use comma to write your number neither use units such as $ or percent sign unless specified otherwise. If you are asked for a string, don't use articles, neither abbreviations (e.g. for cities), and write the digits in plain text unless specified otherwise. If you are asked for a comma separated list, apply the above rules depending of whether the element to be put in the list is a number or a string.\n"
     "Please ensure that the final answer strictly follows the question requirements, without any additional analysis.\n"
-    "If the final ansert is not complete, emit a *new* JSON plan for the remaining work. Keep cycles as\n"
+    "If the final answer is not complete, emit a *new* JSON plan for the remaining work. Keep cycles as\n"
     "few as possible. Never call tools yourself — that's the EXECUTOR's job."\
     "⚠️  Reply with *pure JSON only*."
 )
@@ -62,11 +62,15 @@ class ChatBackend:
         raise NotImplementedError
 
 class OpenAIBackend(ChatBackend):
-    def __init__(self, model: str):
+    def __init__(self, model: str, is_azure: bool):
         self.model = model
         self.client = AsyncOpenAI(
             api_key=os.getenv("OPENAI_API_KEY"),
             base_url=os.getenv("OPENAI_BASE_URL"),
+        ) if not is_azure else AsyncAzureOpenAI(
+            api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+            api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
+            azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
         )
 
     @retry(
@@ -85,7 +89,7 @@ class OpenAIBackend(ChatBackend):
         payload: Dict[str, Any] = {
             "model": self.model,
             "messages": messages,
-            "max_tokens": max_tokens,
+            "max_completion_tokens": max_tokens,
         }
         if tools:
             payload["tools"] = tools
@@ -134,7 +138,7 @@ def _get_tokenizer(model: str):
         return tiktoken.encoding_for_model(model)
     except KeyError:
         return tiktoken.get_encoding("cl100k_base")
-    
+
 def trim_messages(messages: List[Dict[str, str]], max_tokens: int, model="gpt-3.5-turbo"):
 
     enc = _get_tokenizer(model)
@@ -155,9 +159,9 @@ def trim_messages(messages: List[Dict[str, str]], max_tokens: int, model="gpt-3.
 class HierarchicalClient:
     MAX_CYCLES = 3
 
-    def __init__(self, meta_model: str, exec_model: str):
-        self.meta_llm = OpenAIBackend(meta_model)
-        self.exec_llm = OpenAIBackend(exec_model)
+    def __init__(self, meta_model: str, exec_model: str, is_azure: bool = True):
+        self.meta_llm = OpenAIBackend(meta_model, is_azure)
+        self.exec_llm = OpenAIBackend(exec_model, is_azure)
         self.sessions: Dict[str, ClientSession] = {}
         self.shared_history: List[Dict[str, str]] = []
 
@@ -275,7 +279,7 @@ async def run_single_query(client: HierarchicalClient, question: str, file_path:
 
 async def main_async(args):
     load_dotenv()
-    client = HierarchicalClient(args.meta_model, args.exec_model)
+    client = HierarchicalClient(args.meta_model, args.exec_model, os.getenv("USE_AZURE_OPENAI") == "True")
     await client.connect_to_servers(args.servers)
 
     try:

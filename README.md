@@ -35,6 +35,15 @@
   </tr>
 </table>
 
+## 📰 News
+- [2025.09.05] We’ve added support to deploy a local LLM as the executor using vLLM, please see client/agent_local_server.py. 🎉
+- [2025.09.03] We’ve set up a WeChat group to make it easier to collaborate and exchange ideas on this project. Welcome to join the Group to share your thoughts, ask questions, or contribute your ideas! 🔥 🔥 🔥 [Join our WeChat Group Now!](Figure/wechat.jpg)
+- [2025.08.30] We’re excited to announce that our no-parametric Case-Based Reasoning inference code is now officially open-sourced! 🎉
+- [2025.08.28] We’ve created a Discord server to make discussions and collaboration around this project easier. Feel free to join and share your thoughts, ask questions, or contribute ideas! 🔥 🔥 🔥 [Join our Discord!](https://discord.gg/y4FP2EDXyX)
+- [2025.08.27] Thanks for your interest in our work! We’ll release our CBR code next week and our Parametric Memory code next month. We’ll keep updating on our further development.
+- [2025.08.27] We add a new Crawler MCP in ```server/ai_crawler.py``` for web crawling and query-aware content compression to reduce token cost.
+- [2025.08.26] We add the SerpAPI (https://serpapi.com/search-api) MCP tool to help you avoid using the search Docker and speed up development.
+
 ## 🔥 Key Features
 
 - **No LLM weight updates.** Memento reframes continual learning as **memory-based online reinforcement learning** over a **memory-augmented MDP**. A neural **case-selection policy** guides actions; experiences are stored and reused via efficient Read/Write operations.
@@ -55,7 +64,7 @@
 ### Core Components
 
 - **Meta-Planner**: Breaks down high-level queries into executable subtasks using GPT-4.1
-- **Executor**: Executes individual subtasks using GPT-3.5 or other models via MCP tools
+- **Executor**: Executes individual subtasks using o3 or other models via MCP tools
 - **Case Memory**: Stores final-step tuples **(s_T, a_T, r_T)** for experience replay
 - **MCP Tool Layer**: Unified interface for external tools and services
 
@@ -73,20 +82,69 @@
 
 ### Prerequisites
 
-- Python 3.10+
+- Python 3.11+
 - OpenAI API key (or compatible API endpoint)
 - SearxNG instance for web search
-
-### Environment Setup
+- FFmpeg (system-level binary required for video processing)
 
 ### Installation
 
-```bash
-# Create and activate conda environment
+#### Method 1: Using uv (Recommended - Fast & Modern)
 
+```bash
+# Clone repository
 git clone https://github.com/Agent-on-the-Fly/Memento
 cd Memento
 
+# Install uv if not already installed
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Sync dependencies and create virtual environment automatically
+uv sync
+
+# Activate the virtual environment
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+```
+
+
+### System Dependencies Installation
+
+#### FFmpeg Installation (Required)
+
+**FFmpeg is required for video processing functionality.** The `ffmpeg-python` package in our dependencies requires a system-level FFmpeg binary.
+
+**Windows:**
+```bash
+# Option 1: Using Conda (Recommended for isolated environment)
+conda install -c conda-forge ffmpeg
+
+# Option 2: Download from official website
+# Visit https://ffmpeg.org/download.html and add to PATH
+```
+
+**macOS:**
+```bash
+# Using Homebrew
+brew install ffmpeg
+```
+
+**Linux:**
+```bash
+# Debian/Ubuntu
+sudo apt-get update && sudo apt-get install ffmpeg
+
+```
+
+#### Web Scraping & Search Setup
+
+```bash
+# Install and setup crawl4ai
+crawl4ai-setup
+crawl4ai-doctor
+
+# Install playwright browsers
+playwright install
+```
 conda create -n Memento python=3.11 -y
 conda activate Memento
 
@@ -102,9 +160,17 @@ cp .env.example .env
 After creating the `.env` file, you need to configure the following API keys and service endpoints:
 
 ```bash
-# OPENAI API
+#===========================================
+# OpenAI API Configuration
+#===========================================
+USE_AZURE_OPENAI=False
+
 OPENAI_API_KEY=your_openai_api_key_here
 OPENAI_BASE_URL=https://api.openai.com/v1  # or your custom endpoint
+
+AZURE_OPENAI_API_KEY=your_azure_openai_api_key_here
+AZURE_OPENAI_API_VERSION=your_azure_openai_api_version_here
+AZURE_OPENAI_ENDPOINT=your_azure_openai_endpoint_here
 
 #===========================================
 # Tools & Services API
@@ -116,31 +182,16 @@ CHUNKR_API_KEY=your_chunkr_api_key_here
 JINA_API_KEY=your_jina_api_key_here
 
 # ASSEMBLYAI API
+# ASSEMBLYAI API
 ASSEMBLYAI_API_KEY=your_assemblyai_api_key_here
 ```
 
 **Note**: Replace `your_*_api_key_here` with your actual API keys. Some services are optional depending on which tools you plan to use.
 
-### Dependencies Installation
-
-#### Web Scraping & Search
-
-```bash
-# Web crawling and search capabilities
-pip install -U crawl4ai
-crawl4ai-setup
-crawl4ai-doctor
-playwright install
-```
-
-#### Utility Libraries
-
-```bash
-pip install -r requirements.txt
-```
 
 ### SearxNG Setup
 
+For web search capabilities, set up SearxNG:
 For web search capabilities, set up SearxNG:
 You can follow https://github.com/searxng/searxng-docker/ to set the docker and use our setting.
 
@@ -199,22 +250,32 @@ python client/agent.py
 
 ```
 Memento/
-├── client/                 # Main agent implementation
-│   └── agent.py          # Hierarchical client with planner-executor
-├── server/                # MCP tool servers
-│   ├── code_agent.py     # Code execution and workspace management
-│   ├── search_tool.py    # Web search via SearxNG
-│   ├── documents_tool.py # Multi-format document processing
-│   ├── image_tool.py     # Image analysis and captioning
-│   ├── video_tool.py     # Video processing and narration
-│   ├── excel_tool.py     # Spreadsheet processing
-│   ├── math_tool.py      # Mathematical computations
-│   └── craw_page.py      # Web page crawling
-└── interpreters/          # Code execution backends
-    ├── docker_interpreter.py
-    ├── e2b_interpreter.py
-    ├── internal_python_interpreter.py
-    └── subprocess_interpreter.py
+├── client/                   # Main agent implementation
+│   ├── agent.py             # Hierarchical client with planner–executor
+│   └── no_parametric_cbr.py # Non-parametric case-based reasoning
+├── server/                   # MCP tool servers
+│   ├── code_agent.py        # Code execution & workspace management
+│   ├── search_tool.py       # Web search via SearxNG
+│   ├── serp_search.py       # SERP-based search tool
+│   ├── documents_tool.py    # Multi-format document processing
+│   ├── image_tool.py        # Image analysis & captioning
+│   ├── video_tool.py        # Video processing & narration
+│   ├── excel_tool.py        # Spreadsheet processing
+│   ├── math_tool.py         # Mathematical computations
+│   ├── craw_page.py         # Web page crawling
+│   └── ai_crawler.py        # Query-aware compression crawler
+├── interpreters/             # Code execution backends
+│   ├── docker_interpreter.py
+│   ├── e2b_interpreter.py
+│   ├── internal_python_interpreter.py
+│   └── subprocess_interpreter.py
+├── memory/                   # Memory components / data
+├── data/                     # Sample data / cases
+├── searxng-docker/           # SearxNG Docker setup
+├── Figure/                   # Figures for README/paper
+├── README.md
+├── requirements.txt
+└── LICENSE
 ```
 
 ### Adding New Tools
@@ -244,6 +305,7 @@ class CustomInterpreter(BaseInterpreter):
 ### Upcoming Features & Improvements
 
 - [ ] **Add Case Bank Reasoning**: Implement memory-based case retrieval and reasoning system
+- [ ] **Add User Personal Memory Mechanism**: Implement user-preference search
 - [ ] **Refine Tools & Add More Tools**: Enhance existing tools and expand the tool ecosystem
 - [ ] **Test More New Benchmarks**: Evaluate performance on additional benchmark datasets
 
@@ -257,20 +319,34 @@ class CustomInterpreter(BaseInterpreter):
 
 ---
 
+## 🙏 Acknowledgement
+
+* Some of the code in the toolkits and interpreters is adapted from [Camel-AI](https://github.com/camel-ai/camel).
+
+---
+
 ## 📚 Citation
 
 If Memento helps your work, please cite:
 
 ```bibtex
-@techreport{Memento2025,
-  title        = {Memento: Fine-tuning LLM Agents without Fine-tuning LLMs},
-  author       = {Huichi Zhou and Yihang Chen and Siyuan Guo and Xue Yan and
-                  Kin Hei Lee and Zihan Wang and Ka Yiu Lee and Guchun Zhang and
-                  Kun Shao and Linyi Yang and Jun Wang},
-  year         = {2025},
-  github       = {https://github.com/Agent-on-the-Fly/Memento}
+@article{zhou2025mementofinetuningllmagents,
+      title={Memento: Fine-tuning LLM Agents without Fine-tuning LLMs},
+      author={Huichi Zhou and Yihang Chen and Siyuan Guo and Xue Yan and Kin Hei Lee and Zihan Wang and Ka Yiu Lee and Guchun Zhang and Kun Shao and Linyi Yang and Jun Wang},
+      journal={arXiv preprint arXiv: 2508.16153},
+      url={https://arxiv.org/abs/2508.16153},
+      year={2025}
+}
+
+@article{huang2025deep,
+  title={Deep Research Agents: A Systematic Examination And Roadmap},
+  author={Huang, Yuxuan and Chen, Yihang and Zhang, Haozheng and Li, Kang and Fang, Meng and Yang, Linyi and Li, Xiaoguang and Shang, Lifeng and Xu, Songcen and Hao, Jianye and others},
+  journal={arXiv preprint arXiv:2506.18096},
+  year={2025}
 }
 ```
+
+For a broader overview, please check out our survey: [Github](https://github.com/ai-agents-2030/awesome-deep-research-agent)
 
 ---
 
@@ -285,6 +361,6 @@ We welcome contributions! Please see our contributing guidelines for:
 
 ---
 
-## 🙏 Acknowledgments
+## Star History
 
-Thanks to the open-source community and contributors who made this project possible.
+[![Star History Chart](https://api.star-history.com/svg?repos=Agent-on-the-Fly/Memento&type=Date)](https://www.star-history.com/#Agent-on-the-Fly/Memento&Date)
