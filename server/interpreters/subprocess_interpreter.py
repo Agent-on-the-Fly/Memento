@@ -32,6 +32,9 @@ class SubprocessInterpreter(BaseInterpreter):
             executed code. (default: :obj:`True`)
         execution_timeout (int, optional): Maximum time in seconds to wait for
             code execution to complete. (default: :obj:`60`)
+        workspace_dir (str, optional): Working directory for code execution.
+            If specified, all subprocess commands will be executed in this
+            directory. (default: :obj:`None`)
     """
 
     _CODE_EXECUTE_CMD_MAPPING: ClassVar[Dict[str, Dict[str, str]]] = {
@@ -64,11 +67,13 @@ class SubprocessInterpreter(BaseInterpreter):
         print_stdout: bool = False,
         print_stderr: bool = True,
         execution_timeout: int = 60,
+        workspace_dir: str | None = None,
     ) -> None:
         self.require_confirm = require_confirm
         self.print_stdout = print_stdout
         self.print_stderr = print_stderr
         self.execution_timeout = execution_timeout
+        self.workspace_dir = workspace_dir
 
     def run_file(
         self,
@@ -198,6 +203,7 @@ class SubprocessInterpreter(BaseInterpreter):
                 text=True,
                 env=env,
                 shell=False,  # Never use shell=True for security
+                cwd=self.workspace_dir,  # Set working directory if specified
             )
             # Add timeout to prevent hanging processes
             stdout, stderr = proc.communicate(timeout=self.execution_timeout)
