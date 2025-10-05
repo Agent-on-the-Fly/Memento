@@ -36,6 +36,7 @@
 </table>
 
 ## 📰 News
+- [2025.10.05] We’re excited to announce that our parametric Case-Based Reasoning inference code is now officially open-sourced! 🎉
 - [2025.09.05] We’ve added support to deploy a local LLM as the executor using vLLM, please see client/agent_local_server.py. 🎉
 - [2025.09.03] We’ve set up a WeChat group to make it easier to collaborate and exchange ideas on this project. Welcome to join the Group to share your thoughts, ask questions, or contribute your ideas! 🔥 🔥 🔥 [Join our WeChat Group Now!](Figure/wechat.jpg)
 - [2025.08.30] We’re excited to announce that our no-parametric Case-Based Reasoning inference code is now officially open-sourced! 🎉
@@ -86,6 +87,9 @@
 - OpenAI API key (or compatible API endpoint)
 - SearxNG instance for web search
 - FFmpeg (system-level binary required for video processing)
+- PyTorch 2.0+ with CUDA support (for Parametric Memory)
+
+📖 **For detailed installation instructions, see [INSTALL.md](INSTALL.md)**
 
 ### Installation
 
@@ -105,6 +109,38 @@ uv sync
 # Activate the virtual environment
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 ```
+
+#### Method 2: Using pip with requirements.txt
+
+```bash
+# Clone repository
+git clone https://github.com/Agent-on-the-Fly/Memento
+cd Memento
+
+# Create and activate virtual environment
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+#### PyTorch Installation
+
+**For GPU support (Recommended for Parametric Memory):**
+
+```bash
+# CUDA 11.8
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+
+# CUDA 12.1
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+
+# CPU only
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+```
+
+For more PyTorch installation options, visit: https://pytorch.org/get-started/locally/
 
 
 ### System Dependencies Installation
@@ -145,15 +181,6 @@ crawl4ai-doctor
 # Install playwright browsers
 playwright install
 ```
-conda create -n Memento python=3.11 -y
-conda activate Memento
-
-# Navigate to client directory
-cd Memento/client
-
-# Create environment file
-cp .env.example .env
-```
 
 ### Environment Variables Configuration
 
@@ -182,7 +209,6 @@ CHUNKR_API_KEY=your_chunkr_api_key_here
 JINA_API_KEY=your_jina_api_key_here
 
 # ASSEMBLYAI API
-# ASSEMBLYAI API
 ASSEMBLYAI_API_KEY=your_assemblyai_api_key_here
 ```
 
@@ -192,7 +218,6 @@ ASSEMBLYAI_API_KEY=your_assemblyai_api_key_here
 ### SearxNG Setup
 
 For web search capabilities, set up SearxNG:
-For web search capabilities, set up SearxNG:
 You can follow https://github.com/searxng/searxng-docker/ to set the docker and use our setting.
 
 ```bash
@@ -200,6 +225,7 @@ You can follow https://github.com/searxng/searxng-docker/ to set the docker and 
 cd ./Memento/searxng-docker
 docker compose up -d
 ```
+
 
 ### Basic Usage
 
@@ -209,6 +235,50 @@ docker compose up -d
 python client/agent.py
 ```
 
+#### Parametric Memory Mode (Advanced - With Memory Retriever)
+
+**Parametric Memory** enables the agent to learn from past experiences using a trained neural retriever model.
+
+**Step 1: Train the Memory Retriever**
+
+First, you need to train the retriever model with initial training data:
+
+```bash
+cd memory
+
+# Train the retriever model
+python train_memory_retriever.py \
+  --train training_data.jsonl \
+  --output_dir ./ckpts/retriever \
+  --use_plan \
+  --val_ratio 0.1 \
+  --batch_size 32 \
+  --lr 2e-5 \
+  --epochs 10 \
+  --save_best
+```
+
+**Step 2: Configure Environment Variables**
+
+Add the following to your `.env` file:
+
+```bash
+# Memory Configuration
+MEMORY_JSONL_PATH=../memory/memory.jsonl
+TRAINING_DATA_PATH=../memory/training_data.jsonl
+RETRIEVER_MODEL_PATH=../memory/ckpts/retriever/best.pt
+MEMORY_TOP_K=8
+MEMORY_MAX_POS_EXAMPLES=8
+MEMORY_MAX_NEG_EXAMPLES=8
+```
+
+**Step 3: Run Parametric Memory Agent**
+
+```bash
+cd client
+
+python parametric_memory.py
+```
 ---
 
 ## 🔧 Configuration
@@ -250,31 +320,45 @@ python client/agent.py
 
 ```
 Memento/
-├── client/                   # Main agent implementation
-│   ├── agent.py             # Hierarchical client with planner–executor
-│   └── no_parametric_cbr.py # Non-parametric case-based reasoning
-├── server/                   # MCP tool servers
-│   ├── code_agent.py        # Code execution & workspace management
-│   ├── search_tool.py       # Web search via SearxNG
-│   ├── serp_search.py       # SERP-based search tool
-│   ├── documents_tool.py    # Multi-format document processing
-│   ├── image_tool.py        # Image analysis & captioning
-│   ├── video_tool.py        # Video processing & narration
-│   ├── excel_tool.py        # Spreadsheet processing
-│   ├── math_tool.py         # Mathematical computations
-│   ├── craw_page.py         # Web page crawling
-│   └── ai_crawler.py        # Query-aware compression crawler
-├── interpreters/             # Code execution backends
+├── client/                      # Main agent implementation
+│   ├── agent.py                # Hierarchical client with planner–executor
+│   ├── no_parametric_cbr.py    # Non-parametric case-based reasoning
+│   ├── parametric_memory.py    # Parametric memory with neural retriever
+│   ├── run_parametric.sh       # Convenience script for parametric mode
+│   └── PARAMETRIC_MEMORY_GUIDE.md  # Detailed parametric memory guide
+├── server/                      # MCP tool servers
+│   ├── code_agent.py           # Code execution & workspace management
+│   ├── search_tool.py          # Web search via SearxNG
+│   ├── serp_search.py          # SERP-based search tool
+│   ├── documents_tool.py       # Multi-format document processing
+│   ├── image_tool.py           # Image analysis & captioning
+│   ├── video_tool.py           # Video processing & narration
+│   ├── excel_tool.py           # Spreadsheet processing
+│   ├── math_tool.py            # Mathematical computations
+│   ├── craw_page.py            # Web page crawling
+│   └── ai_crawler.py           # Query-aware compression crawler
+├── interpreters/                # Code execution backends
 │   ├── docker_interpreter.py
 │   ├── e2b_interpreter.py
 │   ├── internal_python_interpreter.py
 │   └── subprocess_interpreter.py
-├── memory/                   # Memory components / data
-├── data/                     # Sample data / cases
-├── searxng-docker/           # SearxNG Docker setup
-├── Figure/                   # Figures for README/paper
+├── memory/                      # Memory components / data
+│   ├── parametric_memory.py        # Case retriever for inference
+│   ├── train_memory_retriever.py  # Retriever training script
+│   ├── np_memory.py            # Non-parametric memory utilities
+│   ├── retrain.sh              # Convenience script for retraining
+│   ├── memory.jsonl            # Memory pool (cases with labels)
+│   ├── training_data.jsonl     # Training data for retriever
+│   └── ckpts/                  # Model checkpoints
+│       └── retriever/
+│           ├── best.pt         # Best performing model
+│           └── last.pt         # Last epoch model
+├── data/                        # Sample data / cases
+├── searxng-docker/              # SearxNG Docker setup
+├── Figure/                      # Figures for README/paper
 ├── README.md
 ├── requirements.txt
+├── pyproject.toml
 └── LICENSE
 ```
 
@@ -302,12 +386,18 @@ class CustomInterpreter(BaseInterpreter):
 
 ## 📋 TODO
 
+### Completed Features ✅
+
+- [x] **Add Case Bank Reasoning**: Implemented parametric memory-based case retrieval with neural retriever
+- [x] **Continual Learning Pipeline**: Automated training data collection and model retraining
+
 ### Upcoming Features & Improvements
 
-- [ ] **Add Case Bank Reasoning**: Implement memory-based case retrieval and reasoning system
 - [ ] **Add User Personal Memory Mechanism**: Implement user-preference search
 - [ ] **Refine Tools & Add More Tools**: Enhance existing tools and expand the tool ecosystem
 - [ ] **Test More New Benchmarks**: Evaluate performance on additional benchmark datasets
+- [ ] **Memory Compression**: Implement efficient memory pruning and compression strategies
+- [ ] **Multi-modal Memory**: Extend memory to support images, videos, and other modalities
 
 ---
 
