@@ -145,6 +145,15 @@ crawl4ai-doctor
 # Install playwright browsers
 playwright install
 ```
+conda create -n Memento python=3.11 -y
+conda activate Memento
+
+# Navigate to client directory
+cd Memento/client
+
+# Create environment file
+cp .env.example .env
+```
 
 ### Environment Variables Configuration
 
@@ -173,6 +182,7 @@ CHUNKR_API_KEY=your_chunkr_api_key_here
 JINA_API_KEY=your_jina_api_key_here
 
 # ASSEMBLYAI API
+# ASSEMBLYAI API
 ASSEMBLYAI_API_KEY=your_assemblyai_api_key_here
 ```
 
@@ -182,6 +192,7 @@ ASSEMBLYAI_API_KEY=your_assemblyai_api_key_here
 ### SearxNG Setup
 
 For web search capabilities, set up SearxNG:
+For web search capabilities, set up SearxNG:
 You can follow https://github.com/searxng/searxng-docker/ to set the docker and use our setting.
 
 ```bash
@@ -189,7 +200,6 @@ You can follow https://github.com/searxng/searxng-docker/ to set the docker and 
 cd ./Memento/searxng-docker
 docker compose up -d
 ```
-
 
 ### Basic Usage
 
